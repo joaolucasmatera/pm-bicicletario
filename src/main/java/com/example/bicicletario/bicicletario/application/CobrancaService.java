@@ -1,6 +1,5 @@
 package com.example.bicicletario.bicicletario.application;
-
-import com.example.bicicletario.bicicletario.domain.Ciclista;
+import com.example.bicicletario.bicicletario.domain.CartaoDeCredito;
 import com.example.bicicletario.bicicletario.domain.Cobranca;
 import com.example.bicicletario.bicicletario.domain.dto.NovoCobrancaDTO;
 import com.example.bicicletario.bicicletario.domain.enums.StatusCobranca;
@@ -8,34 +7,39 @@ import com.example.bicicletario.bicicletario.infraestructure.CobrancaRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
-
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-
 
 @Service
 public class CobrancaService {
 
-
     @Autowired
     private RestTemplate restTemplate;
 
-    // Simulação do repositório de cobrança e serviço de email
     @Autowired
     private CobrancaRepository cobrancaRepository;
 
     @Autowired
     private EmailService emailService;
 
-    public Cobranca realizarCobranca(NovoCobrancaDTO novaCobranca) throws Exception {
-        // Recuperar ciclista
-        Ciclista ciclista = recuperarCiclista(novaCobranca.getCiclista());
+    @Autowired
+    private AdministradoraCCService administradoraCCService;
 
-        if (ciclista == null) {
-            throw new Exception("Ciclista não encontrado");
+    public Cobranca realizarCobranca(NovoCobrancaDTO novaCobranca) throws Exception {
+        // Validação do valor
+        if (novaCobranca.getValor() == null || novaCobranca.getValor().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("O valor deve ser maior que zero");
         }
 
-        // Criar nova cobrança
+        // Recuperar dados do cartão de crédito
+        CartaoDeCredito cartaoDeCredito = recuperarCartaoDeCredito(novaCobranca.getCiclista());
+
+        if (cartaoDeCredito == null) {
+            throw new Exception("Cartão de crédito não encontrado");
+        }
+
+        // Criar cobrança
         Cobranca cobranca = new Cobranca();
         cobranca.setCiclista(novaCobranca.getCiclista());
         cobranca.setValor(novaCobranca.getValor());
@@ -43,7 +47,7 @@ public class CobrancaService {
         cobranca.setHoraSolicitacao(LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME));
 
         // Simular envio para administradora de cartão de crédito
-        boolean pagamentoConfirmado = enviarParaAdministradoraCC(cobranca);
+        boolean pagamentoConfirmado = administradoraCCService.enviarParaAdministradoraCC(cartaoDeCredito, novaCobranca.getValor());
 
         if (pagamentoConfirmado) {
             cobranca.setStatusCobranca(StatusCobranca.PAGA);
@@ -58,34 +62,32 @@ public class CobrancaService {
         cobranca = cobrancaRepository.save(cobranca);
 
         // Enviar email ao ciclista
-        enviarEmailCobranca(ciclista, cobranca);
+        // enviarEmailCobranca(cartaoDeCredito, cobranca);
 
         return cobranca;
     }
 
-
-
-    public Ciclista recuperarCiclista(int idCiclista) throws Exception {
-        try {
-            //Ciclista ciclista = restTemplate.getForObject("http://localhost:8080/ciclista/" + idCiclista, Ciclista.class);
-            //Simulando ciclista
-            Ciclista ciclista = new Ciclista();
-            ciclista.setId(idCiclista);
-            ciclista.setNome("Ciclista Simulado");
-            ciclista.setEmail("simulado@exemplo.com");
-            return ciclista;
+    // Método para recuperar dados do cartão de crédito
+    private CartaoDeCredito recuperarCartaoDeCredito(int idCiclista) throws Exception {
+        /*try {
+            String url = "http://localhost:8080/cartaoDeCredito/" + idCiclista;
+            return restTemplate.getForObject(url, CartaoDeCredito.class);
         } catch (Exception e) {
-            throw new Exception("Erro ao recuperar ciclista", e);
-        }}
-
-        private boolean enviarParaAdministradoraCC(Cobranca cobranca) {
-            // Lógica de integração com administradora de cartão de crédito
-            return true; // Simulação de sucesso
-        }
-
-    private void enviarEmailCobranca(Ciclista ciclista, Cobranca cobranca) {
-        // Lógica para envio de email
-        // emailService.enviarEmail(ciclista.getEmail(), "Detalhes da sua cobrança", "Detalhes da cobrança...");
+            throw new Exception("Erro ao recuperar dados do cartão de crédito", e);
+        }*/
+        CartaoDeCredito cartaoDeCredito = new CartaoDeCredito();
+        cartaoDeCredito.setId(idCiclista);
+        cartaoDeCredito.setCvv("707");
+        cartaoDeCredito.setNomeTitular("JOAQUIM MAÇOMBO LEAO");
+        cartaoDeCredito.setNumero("5269 2079 9840 6777");
+        cartaoDeCredito.setValidade("23/05/2025");
+        return cartaoDeCredito;
     }
-}
 
+    // Método para enviar email (comentar se não for necessário)
+    /*
+    private void enviarEmailCobranca(CartaoDeCredito cartaoDeCredito, Cobranca cobranca) {
+        emailService.enviarEmail(cartaoDeCredito.getEmail(), "Detalhes da sua cobrança", "Detalhes da cobrança...");
+    }
+    */
+}
